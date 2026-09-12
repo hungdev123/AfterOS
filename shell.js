@@ -1,21 +1,6 @@
 const input = document.getElementById('terminal-input');
 const history = document.getElementById('history');
 const terminal = document.getElementById('terminal');
-const installedApps = new Set();
-const loadingApps = new Set();
-const customCommands = new Map();
-
-window.AfterOS = {
-    registerCommand(name, handler) {
-        const commandName = String(name).trim().toLowerCase();
-        if (!commandName || typeof handler !== 'function') {
-            throw new Error('registerCommand requires a command name and function');
-        }
-
-        customCommands.set(commandName, handler);
-    },
-    print: logOutput
-};
 
 terminal.addEventListener('click', () => input.focus());
 
@@ -45,94 +30,94 @@ function logOutput(text) {
     history.appendChild(output);
 }
 
-function processCommand(cmd) {
-    const parts = cmd.trim().split(/\s+/);
-    const coreCommand = parts[0].toLowerCase();
+const commands = new Map();
 
-    if (customCommands.has(coreCommand)) {
-        customCommands.get(coreCommand)(parts.slice(1), logOutput);
-        return;
+function registerCommand(name, handler, description = '') {
+    const commandName = String(name).trim().toLowerCase();
+
+    if (!/^[a-z0-9_-]+$/.test(commandName)) {
+        throw new Error('Command name may only contain letters, numbers, "_", and "-".');
+    }
+    if (typeof handler !== 'function') {
+        throw new Error(`Handler for "${commandName}" must be a function.`);
+    }
+    if (commands.has(commandName)) {
+        throw new Error(`The command "${commandName}" already exists.`);
     }
 
-    switch (coreCommand) {
-        case 'help':
-            logOutput('AfterOS');
-            logOutput(' Shift+T to open a terminal')
-            logOutput();
-            logOutput('Available commands: help, clear, about, date, import');
-            if (customCommands.size) {
-                logOutput(`Installed commands: ${[...customCommands.keys()].join(', ')}`);
-            }
-            break;
-        case 'about':
-            logOutput('Terminal (terminal) v0.0.1-demo ');
-            logOutput('This is a terminal based on Javascript');
-            break;
-        case 'date':
-            logOutput(new Date().toString());
-            break;
-        case 'import':
-            importApp(parts[1]);
-            break;
-        case 'clear':
-            history.innerHTML = '';
-            break;
-        case 'exit':
-            logOutput('\'exit\' does not support in this version.');
-            break;
-        default:
-            logOutput(`command not found: ${coreCommand}`);
-    }
+    commands.set(commandName, { handler, description });
 }
 
-async function importApp(link) {
-    if (!link) {
-        logOutput('Usage: import <link-to-javascript-file>');
-        return;
-    }
-
+async function installApp(url) {
     let appUrl;
     try {
-        appUrl = new URL(link, document.baseURI);
-    } catch (error) {
-        logOutput('import: invalid link');
+        appUrl = new URL(url, window.location.href);
+    } catch {
+        throw new Error('Please provide a valid JavaScript URL.');
+    }
+
+    // Dynamic imports execute the downloaded module. Never install code you do not trust.
+    const appModule = await import(appUrl.href);
+    const install = appModule.default || appModule.install;
+
+    if (typeof install !== 'function') {
+        throw new Error('The app must export a default function or an install function.');
+    }
+
+    await install({
+        registerCommand,
+        logOutput,
+        commands: () => [...commands.keys()]
+    });
+}
+
+async function processCommand(cmd) {
+    const [rawCommand, ...args] = cmd.trim().split(/\s+/);
+    const coreCommand = rawCommand.toLowerCase();
+
+    if (coreCommand === 'import') {
+        const url = args.join(' ');
+        if (!url) {
+            logOutput('Usage: import <url-to-javascript-module>');
+            return;
+        }
+        logOutput(`Installing app from ${url}...`);
+        try {
+            await installApp(url);
+            logOutput('App installed. Type help to see its commands.');
+        } catch (error) {
+            logOutput(`Import failed: ${error.message}`);
+        }
         return;
     }
 
-    if (!['http:', 'https:', 'file:'].includes(appUrl.protocol)) {
-        logOutput('import: only http, https, or file links are supported');
+    const command = commands.get(coreCommand);
+    if (!command) {
+        logOutput(`command not found: ${coreCommand}`);
         return;
     }
-
-    if (installedApps.has(appUrl.href)) {
-        logOutput(`app already imported: ${appUrl.href}`);
-        return;
-    }
-
-    if (loadingApps.has(appUrl.href)) {
-        logOutput(`app is already importing: ${appUrl.href}`);
-        return;
-    }
-
-    loadingApps.add(appUrl.href);
-    logOutput(`importing app: ${appUrl.href}`);
 
     try {
-        const response = await fetch(appUrl.href);
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-        }
-
-        const source = await response.text();
-        const runApp = new Function(`${source}\n//# sourceURL=${appUrl.href}`);
-        runApp();
-        loadingApps.delete(appUrl.href);
-        installedApps.add(appUrl.href);
-        logOutput(`app imported: ${appUrl.href}`);
+        await command.handler(args, { logOutput, registerCommand });
     } catch (error) {
-        loadingApps.delete(appUrl.href);
-        logOutput(`import failed: ${error.message}`);
+        logOutput(`${coreCommand}: ${error.message}`);
     }
-
-    terminal.scrollTop = terminal.scrollHeight;
 }
+
+registerCommand('help', () => {
+    logOutput('AfterOS');
+    logOutput(' Shift+T to open a terminal');
+    logOutput('');
+    logOutput(`Available commands: ${[...commands.keys()].join(', ')}`);
+}, 'Show available commands');
+
+registerCommand('about', () => {
+    logOutput('Terminal (terminal) v0.0.1-demo');
+    logOutput('This is a terminal based on Javascript');
+}, 'About AfterOS');
+
+registerCommand('date', () => logOutput(new Date().toString()), 'Show the current date');
+
+registerCommand('clear', () => { history.innerHTML = ''; }, 'Clear the terminal');
+
+registerCommand('exit', () => logOutput("'exit' does not support in this version."), 'Close the terminal');
