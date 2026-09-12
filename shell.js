@@ -2,6 +2,19 @@ const input = document.getElementById('terminal-input');
 const history = document.getElementById('history');
 const terminal = document.getElementById('terminal');
 const installedApps = new Set();
+const customCommands = new Map();
+
+window.AfterOS = {
+    registerCommand(name, handler) {
+        const commandName = String(name).trim().toLowerCase();
+        if (!commandName || typeof handler !== 'function') {
+            throw new Error('registerCommand requires a command name and function');
+        }
+
+        customCommands.set(commandName, handler);
+    },
+    print: logOutput
+};
 
 terminal.addEventListener('click', () => input.focus());
 
@@ -35,12 +48,20 @@ function processCommand(cmd) {
     const parts = cmd.trim().split(/\s+/);
     const coreCommand = parts[0].toLowerCase();
 
+    if (customCommands.has(coreCommand)) {
+        customCommands.get(coreCommand)(parts.slice(1), logOutput);
+        return;
+    }
+
     switch (coreCommand) {
         case 'help':
             logOutput('AfterOS');
             logOutput(' Shift+T to open a terminal')
             logOutput();
             logOutput('Available commands: help, clear, about, date, import');
+            if (customCommands.size) {
+                logOutput(`Installed commands: ${[...customCommands.keys()].join(', ')}`);
+            }
             break;
         case 'about':
             logOutput('Terminal (terminal) v0.0.1-demo ');
