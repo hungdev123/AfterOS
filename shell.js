@@ -71,16 +71,27 @@ async function installApp(url) {
     });
 }
 
+function resolveAppUrl(packageNameOrUrl) {
+    // A simple name is always loaded from this site's packages directory.
+    if (/^[a-z0-9][a-z0-9_-]*$/i.test(packageNameOrUrl)) {
+        return new URL(`./packages/${packageNameOrUrl}.js`, window.location.href).href;
+    }
+
+    // Keep supporting explicit URLs and relative paths for development.
+    return packageNameOrUrl;
+}
+
 async function processCommand(cmd) {
     const [rawCommand, ...args] = cmd.trim().split(/\s+/);
     const coreCommand = rawCommand.toLowerCase();
 
     if (coreCommand === 'import') {
-        const url = args.join(' ');
-        if (!url) {
-            logOutput('Usage: import <url-to-javascript-module>');
+        const packageNameOrUrl = args.join(' ');
+        if (!packageNameOrUrl) {
+            logOutput('Usage: import <package-name> or import <javascript-url>');
             return;
         }
+        const url = resolveAppUrl(packageNameOrUrl);
         logOutput(`Installing app from ${url}...`);
         try {
             await installApp(url);
