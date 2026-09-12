@@ -1,15 +1,18 @@
 const input = document.getElementById('terminal-input');
 const history = document.getElementById('history');
 const terminal = document.getElementById('terminal');
+const installedApps = new Set();
 
 terminal.addEventListener('click', () => input.focus());
 
-input.addEventListener('keydown', function(e) {
+input.addEventListener('keydown', function (e) {
     if (e.key === 'Enter') {
         const commandText = input.value.trim();
         if (commandText) {
             logCommand(commandText);
             processCommand(commandText);
+        } else {
+            logCommand('');
         }
         input.value = '';
         terminal.scrollTop = terminal.scrollHeight;
@@ -29,15 +32,15 @@ function logOutput(text) {
 }
 
 function processCommand(cmd) {
-    const parts = cmd.toLowerCase().split(' ');
-    const coreCommand = parts[0];
+    const parts = cmd.trim().split(/\s+/);
+    const coreCommand = parts[0].toLowerCase();
 
-    switch(coreCommand) {
+    switch (coreCommand) {
         case 'help':
             logOutput('AfterOS');
             logOutput(' Shift+T to open a terminal')
             logOutput();
-            logOutput('Available commands: help, clear, about, date');
+            logOutput('Available commands: help, clear, about, date, import');
             break;
         case 'about':
             logOutput('Terminal (terminal) v0.0.1-demo ');
@@ -46,13 +49,57 @@ function processCommand(cmd) {
         case 'date':
             logOutput(new Date().toString());
             break;
+        case 'import':
+            importApp(parts[1]);
+            break;
         case 'clear':
             history.innerHTML = '';
             break;
         case 'exit':
             logOutput('\'exit\' does not support in this version.');
             break;
-    default:
-        logOutput(`command not found: ${coreCommand}`);
+        default:
+            logOutput(`command not found: ${coreCommand}`);
     }
+}
+
+function importApp(link) {
+    if (!link) {
+        logOutput('Usage: import <link-to-javascript-file>');
+        return;
+    }
+
+    let appUrl;
+    try {
+        appUrl = new URL(link, document.baseURI);
+    } catch (error) {
+        logOutput('import: invalid link');
+        return;
+    }
+
+    if (!['http:', 'https:', 'file:'].includes(appUrl.protocol)) {
+        logOutput('import: only http, https, or file links are supported');
+        return;
+    }
+
+    if (installedApps.has(appUrl.href)) {
+        logOutput(`app already imported: ${appUrl.href}`);
+        return;
+    }
+
+    const app = document.createElement('script');
+    app.src = appUrl.href;
+    app.async = true;
+    app.onload = () => {
+        installedApps.add(appUrl.href);
+        logOutput(`app imported: ${appUrl.href}`);
+        terminal.scrollTop = terminal.scrollHeight;
+    };
+    app.onerror = () => {
+        logOutput(`import failed: ${appUrl.href}`);
+        terminal.scrollTop = terminal.scrollHeight;
+    };
+
+    document.head.appendChild(app);
+    logOutput(`importing app: ${appUrl.href}`);
 }
