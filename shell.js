@@ -31,6 +31,7 @@ function logOutput(text) {
 }
 
 const commands = new Map();
+const packageManifestUrl = new URL('./packages/index.json', window.location.href);
 
 function registerCommand(name, handler, description = '') {
     const commandName = String(name).trim().toLowerCase();
@@ -81,6 +82,32 @@ function resolveAppUrl(packageNameOrUrl) {
     return packageNameOrUrl;
 }
 
+async function getVerifiedPackages() {
+    const response = await fetch(packageManifestUrl, { cache: 'no-cache' });
+    if (!response.ok) {
+        throw new Error(`Could not load package list (${response.status}).`);
+    }
+
+    const packages = await response.json();
+    if (!Array.isArray(packages)) {
+        throw new Error('Invalid packages/index.json format.');
+    }
+    return packages.filter((pkg) =>
+        pkg && typeof pkg.name === 'string' && /^[a-z0-9][a-z0-9_-]*$/i.test(pkg.name)
+    );
+}
+
+function showPackages(packages) {
+    if (packages.length === 0) {
+        logOutput('No verified packages found.');
+        return;
+    }
+
+    packages.forEach((pkg) => {
+        logOutput(`${pkg.name}${pkg.description ? ` — ${pkg.description}` : ''}`);
+    });
+}
+
 async function processCommand(cmd) {
     const [rawCommand, ...args] = cmd.trim().split(/\s+/);
     const coreCommand = rawCommand.toLowerCase();
@@ -88,9 +115,37 @@ async function processCommand(cmd) {
     if (coreCommand === 'import') {
         const packageNameOrUrl = args.join(' ');
         if (!packageNameOrUrl) {
-            logOutput('Usage: import <package-name> or import <javascript-url>');
+            logOutput('Usage: import <package-name> | import -l | import -s <search>');
             return;
         }
+
+        if (args[0] === '-l') {
+            try {
+                logOutput('Verified packages:');
+                showPackages(await getVerifiedPackages());
+            } catch (error) {
+                logOutput(`Package list failed: ${error.message}`);
+            }
+            return;
+        }
+
+        if (args[0] === '-s') {
+            const search = args.slice(1).join(' ').trim().toLowerCase();
+            if (!search) {
+                logOutput('Usage: import -s <package-name>');
+                return;
+            }
+            try {
+                const matches = (await getVerifiedPackages()).filter((pkg) =>
+                    pkg.name.toLowerCase().includes(search)
+                );
+                showPackages(matches);
+            } catch (error) {
+                logOutput(`Package search failed: ${error.message}`);
+            }
+            return;
+        }
+
         const url = resolveAppUrl(packageNameOrUrl);
         logOutput(`Installing app from ${url}...`);
         try {
