@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<style>
+    body {
+        background-color: black;
+        color: white;
+        font-family: 'Courier New', Courier, monospace;
+        margin: 20px;
+    }
+
+    .input-line {
+        display: flex;
+        align-items: center;
+        margin-top: 5px;
+    }
+
+        .prompt {
+        color: #87ceeb;
+        margin-right: 10px;
+        white-space: nowrap;
+    }
+
+    #terminal-input {
+        background: transparent;
+        border: none;
+        color: #ffffff;
+        font-family: inherit;
+        font-size: inherit;
+        outline: none;
+        flex-grow: 1;
+    }
+</style>
+<body>
+    <div class="terminal" id="terminal">
+        <div id="history">
+            <div>Welcome to the Terminal. Type 'help' for commands. BASED ON JAVASCRIPT.</div>
+        </div>
+
+        <div class="input-line">
+            <span class="prompt">user@afteros:~$</span>
+            <input type="text" id="terminal-input" autofocus autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+        </div>
+    </div>
+
+    <script src="https://raw.githubusercontent.com/hungdev123/AfterOS/refs/heads/main/shell.js"></script>
+</body>
+</html>
