@@ -2,6 +2,7 @@ const input = document.getElementById('terminal-input');
 const history = document.getElementById('history');
 const terminal = document.getElementById('terminal');
 const installedApps = new Set();
+const loadingApps = new Set();
 const customCommands = new Map();
 
 window.AfterOS = {
@@ -84,7 +85,7 @@ function processCommand(cmd) {
     }
 }
 
-function importApp(link) {
+async function importApp(link) {
     if (!link) {
         logOutput('Usage: import <link-to-javascript-file>');
         return;
@@ -108,19 +109,44 @@ function importApp(link) {
         return;
     }
 
-    const app = document.createElement('script');
-    app.src = appUrl.href;
-    app.async = true;
-    app.onload = () => {
-        installedApps.add(appUrl.href);
-        logOutput(`app imported: ${appUrl.href}`);
-        terminal.scrollTop = terminal.scrollHeight;
-    };
-    app.onerror = () => {
+    if (loadingApps.has(appUrl.href)) {
+        logOutput(`app is already importing: ${appUrl.href}`);
+        return;
+    }
+
+    loadingApps.add(appUrl.href);
+    logOutput(`importing app: ${appUrl.href}`);
+
+    try {
+        const response = await fetch(appUrl.href);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const source = await response.text();
+        const blobUrl = URL.createObjectURL(new Blob([source], {
+            type: 'application/javascript'
+        }));
+        const app = document.createElement('script');
+        app.src = blobUrl;
+        app.async = true;
+        app.onload = () => {
+            URL.revokeObjectURL(blobUrl);
+            loadingApps.delete(appUrl.href);
+            installedApps.add(appUrl.href);
+            logOutput(`app imported: ${appUrl.href}`);
+            terminal.scrollTop = terminal.scrollHeight;
+        };
+        app.onerror = () => {
+            URL.revokeObjectURL(blobUrl);
+            loadingApps.delete(appUrl.href);
+            logOutput(`import failed: ${appUrl.href}`);
+            terminal.scrollTop = terminal.scrollHeight;
+        };
+        document.head.appendChild(app);
+    } catch (error) {
+        loadingApps.delete(appUrl.href);
         logOutput(`import failed: ${appUrl.href}`);
         terminal.scrollTop = terminal.scrollHeight;
-    };
-
-    document.head.appendChild(app);
-    logOutput(`importing app: ${appUrl.href}`);
+    }
 }
