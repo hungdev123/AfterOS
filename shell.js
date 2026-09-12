@@ -124,29 +124,15 @@ async function importApp(link) {
         }
 
         const source = await response.text();
-        const blobUrl = URL.createObjectURL(new Blob([source], {
-            type: 'application/javascript'
-        }));
-        const app = document.createElement('script');
-        app.src = blobUrl;
-        app.async = true;
-        app.onload = () => {
-            URL.revokeObjectURL(blobUrl);
-            loadingApps.delete(appUrl.href);
-            installedApps.add(appUrl.href);
-            logOutput(`app imported: ${appUrl.href}`);
-            terminal.scrollTop = terminal.scrollHeight;
-        };
-        app.onerror = () => {
-            URL.revokeObjectURL(blobUrl);
-            loadingApps.delete(appUrl.href);
-            logOutput(`import failed: ${appUrl.href}`);
-            terminal.scrollTop = terminal.scrollHeight;
-        };
-        document.head.appendChild(app);
+        const runApp = new Function(`${source}\n//# sourceURL=${appUrl.href}`);
+        runApp();
+        loadingApps.delete(appUrl.href);
+        installedApps.add(appUrl.href);
+        logOutput(`app imported: ${appUrl.href}`);
     } catch (error) {
         loadingApps.delete(appUrl.href);
-        logOutput(`import failed: ${appUrl.href}`);
-        terminal.scrollTop = terminal.scrollHeight;
+        logOutput(`import failed: ${error.message}`);
     }
+
+    terminal.scrollTop = terminal.scrollHeight;
 }
