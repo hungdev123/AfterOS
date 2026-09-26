@@ -8,6 +8,12 @@ const fontOptions = [
     { label: 'Consolas', value: "Consolas, 'Liberation Mono', monospace" },
     { label: 'Courier New', value: "'Courier New', Courier, monospace" }
 ];
+const defaultStyle = {
+    font: "'Courier New', Courier, monospace",
+    background: '#000000',
+    text: '#ffffff',
+    prompt: '#87ceeb'
+};
 
 function loadFonts() {
     if (document.getElementById('bstyle-fonts')) return;
@@ -32,7 +38,57 @@ function normalizeHex(value) {
     return /^#[0-9a-f]{6}$/i.test(hex) ? hex.toLowerCase() : null;
 }
 
+// Lets bstyle work with both the newest AfterOS host API and older deployments.
+function createFallbackStyleApi() {
+    const get = () => {
+        const computed = getComputedStyle(document.body);
+        return {
+            font: document.body.style.fontFamily || defaultStyle.font,
+            background: computed.getPropertyValue('--terminal-background').trim() || defaultStyle.background,
+            text: computed.getPropertyValue('--terminal-text').trim() || defaultStyle.text,
+            prompt: computed.getPropertyValue('--terminal-prompt').trim() || defaultStyle.prompt
+        };
+    };
+    const persist = (style) => {
+        const serialized = JSON.stringify(style);
+        document.cookie = `afteros-terminal-style=${encodeURIComponent(serialized)}; max-age=31536000; path=/; samesite=lax`;
+        try {
+            localStorage.setItem('afteros-terminal-style-backup', serialized);
+        } catch {
+            // Cookie storage is still available.
+        }
+    };
+    const apply = (style) => {
+        const root = document.documentElement.style;
+        root.setProperty('--terminal-background', style.background);
+        root.setProperty('--terminal-text', style.text);
+        root.setProperty('--terminal-prompt', style.prompt);
+        document.body.style.fontFamily = style.font;
+    };
+
+    return {
+        get,
+        set(style) {
+            const nextStyle = { ...get(), ...style };
+            apply(nextStyle);
+            persist(nextStyle);
+        },
+        reset() {
+            apply(defaultStyle);
+            document.cookie = 'afteros-terminal-style=; max-age=0; path=/; samesite=lax';
+            try {
+                localStorage.removeItem('afteros-terminal-style-backup');
+            } catch {
+                // Nothing else is needed here.
+            }
+        }
+    };
+}
+
 export default function install({ registerCommand, logOutput, terminalStyle }) {
+    const styleApi = terminalStyle?.get && terminalStyle?.set && terminalStyle?.reset
+        ? terminalStyle
+        : createFallbackStyleApi();
     let session = null;
 
     function render() {
@@ -116,11 +172,11 @@ export default function install({ registerCommand, logOutput, terminalStyle }) {
                 session.editing = ['Background', 'Text', 'Prompt'][session.selected - 1];
                 session.buffer = '';
             } else if (session.selected === 4) {
-                terminalStyle.set(session.style);
+                styleApi.set(session.style);
                 close('bstyle saved.');
                 return;
             } else if (session.selected === 5) {
-                terminalStyle.reset();
+                styleApi.reset();
                 close('Terminal style reset to default.');
                 return;
             }
@@ -135,7 +191,7 @@ export default function install({ registerCommand, logOutput, terminalStyle }) {
         loadFonts();
         const panel = document.createElement('div');
         panel.className = 'terminal-style-panel';
-        const style = terminalStyle.get();
+        const style = styleApi.get();
         session = {
             panel,
             selected: 0,
