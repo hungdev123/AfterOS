@@ -5,9 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 <style>
+    :root {
+        --terminal-background: #000000;
+        --terminal-text: #ffffff;
+        --terminal-prompt: #87ceeb;
+    }
+
     body {
-        background-color: black;
-        color: white;
+        background-color: var(--terminal-background);
+        color: var(--terminal-text);
         font-family: 'Courier New', Courier, monospace;
         margin: 20px;
     }
@@ -19,7 +25,7 @@
     }
 
         .prompt {
-        color: #87ceeb;
+        color: var(--terminal-prompt);
         margin-right: 10px;
         white-space: nowrap;
     }
@@ -27,11 +33,22 @@
     #terminal-input {
         background: transparent;
         border: none;
-        color: #ffffff;
+        color: var(--terminal-text);
         font-family: inherit;
         font-size: inherit;
         outline: none;
         flex-grow: 1;
+    }
+
+    .terminal-style-panel {
+        margin-top: 14px;
+        max-width: 390px;
+        padding: 24px;
+        border: 1px solid var(--terminal-text);
+        border-radius: 10px;
+        background: var(--terminal-background);
+        color: var(--terminal-text);
+        white-space: pre-wrap;
     }
 </style>
 <body>
