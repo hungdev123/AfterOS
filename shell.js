@@ -5,6 +5,10 @@ const terminal = document.getElementById('terminal');
 terminal.addEventListener('click', () => input.focus());
 
 input.addEventListener('keydown', function (e) {
+    if (styleSession && handleStyleKey(e)) {
+        return;
+    }
+
     if (e.key === 'Enter') {
         const commandText = input.value.trim();
         if (commandText) {
@@ -32,6 +36,200 @@ function logOutput(text) {
 
 const commands = new Map();
 const packageManifestUrl = new URL('./packages/index.json', window.location.href);
+const terminalStyleCookieName = 'afteros-terminal-style';
+const terminalStyleStorageKey = 'afteros-terminal-style-backup';
+const defaultTerminalStyle = {
+    font: "'Courier New', Courier, monospace",
+    background: '#000000',
+    text: '#ffffff',
+    prompt: '#87ceeb'
+};
+const fontOptions = [
+    { label: 'Courier New', value: "'Courier New', Courier, monospace" },
+    { label: 'System Monospace', value: 'monospace' },
+    { label: 'Consolas', value: "Consolas, 'Liberation Mono', monospace" },
+    { label: 'Fira Code', value: "'Fira Code', monospace" },
+    { label: 'Arial', value: 'Arial, sans-serif' }
+];
+const colorOptions = [
+    { label: 'Black', value: '#000000' },
+    { label: 'White', value: '#ffffff' },
+    { label: 'Red', value: '#ff5555' },
+    { label: 'Green', value: '#50fa7b' },
+    { label: 'Yellow', value: '#f1fa8c' },
+    { label: 'Blue', value: '#6272a4' },
+    { label: 'Sky blue', value: '#87ceeb' },
+    { label: 'Cyan', value: '#8be9fd' },
+    { label: 'Magenta', value: '#ff79c6' },
+    { label: 'Gray', value: '#888888' }
+];
+let styleSession = null;
+
+function applyTerminalStyle(style) {
+    const rootStyle = document.documentElement.style;
+    rootStyle.setProperty('--terminal-background', style.background);
+    rootStyle.setProperty('--terminal-text', style.text);
+    rootStyle.setProperty('--terminal-prompt', style.prompt || defaultTerminalStyle.prompt);
+    document.body.style.fontFamily = style.font;
+}
+
+function getCookie(name) {
+    const encodedName = `${encodeURIComponent(name)}=`;
+    const cookie = document.cookie.split('; ').find((item) => item.startsWith(encodedName));
+    return cookie ? decodeURIComponent(cookie.slice(encodedName.length)) : null;
+}
+
+function saveTerminalStyle(style) {
+    const serializedStyle = JSON.stringify(style);
+    // Cookie is the primary store; localStorage keeps the setting in previews
+    // or browsers that disable site cookies.
+    try {
+        document.cookie = `${encodeURIComponent(terminalStyleCookieName)}=${encodeURIComponent(serializedStyle)}; max-age=31536000; path=/; samesite=lax`;
+    } catch {
+        // The local backup below still lets the terminal retain its style.
+    }
+    try {
+        localStorage.setItem(terminalStyleStorageKey, serializedStyle);
+    } catch {
+        // Cookie storage remains available when localStorage is unavailable.
+    }
+}
+
+function clearTerminalStyle() {
+    try {
+        document.cookie = `${encodeURIComponent(terminalStyleCookieName)}=; max-age=0; path=/; samesite=lax`;
+    } catch {
+        // Nothing else is needed here.
+    }
+    try {
+        localStorage.removeItem(terminalStyleStorageKey);
+    } catch {
+        // Nothing else is needed here.
+    }
+}
+
+function isDefaultTerminalStyle(style) {
+    return style.font === defaultTerminalStyle.font
+        && style.background === defaultTerminalStyle.background
+        && style.text === defaultTerminalStyle.text
+        && style.prompt === defaultTerminalStyle.prompt;
+}
+
+function loadTerminalStyle() {
+    try {
+        const savedStyle = JSON.parse(
+            getCookie(terminalStyleCookieName) || localStorage.getItem(terminalStyleStorageKey)
+        );
+        if (savedStyle?.font && savedStyle?.background && savedStyle?.text) {
+            applyTerminalStyle(savedStyle);
+        }
+    } catch {
+        clearTerminalStyle();
+    }
+}
+
+function optionIndex(options, value) {
+    const index = options.findIndex((option) => option.value === value);
+    return index === -1 ? 0 : index;
+}
+
+function currentSessionStyle() {
+    return {
+        font: fontOptions[styleSession.fontIndex].value,
+        background: colorOptions[styleSession.backgroundIndex].value,
+        text: colorOptions[styleSession.textIndex].value,
+        prompt: colorOptions[styleSession.promptIndex].value
+    };
+}
+
+function renderStyleSession() {
+    const rows = [
+        `Font: ${fontOptions[styleSession.fontIndex].label}`,
+        `Background: ${colorOptions[styleSession.backgroundIndex].label}`,
+        `Text: ${colorOptions[styleSession.textIndex].label}`,
+        `Prompt: ${colorOptions[styleSession.promptIndex].label}`,
+        'Save and exit',
+        'Default'
+    ];
+    const content = [
+        'Terminal style editor',
+        '↑/↓ select  •  ←/→ change  •  Enter choose  •  Esc cancel',
+        '',
+        ...rows.map((row, index) => `${index === styleSession.selected ? '❯' : ' '} ${row}`)
+    ];
+    styleSession.panel.textContent = content.join('\n');
+    terminal.scrollTop = terminal.scrollHeight;
+}
+
+function finishStyleSession(style, message) {
+    applyTerminalStyle(style);
+    if (isDefaultTerminalStyle(style)) {
+        clearTerminalStyle();
+    } else {
+        saveTerminalStyle(style);
+    }
+    styleSession.panel.remove();
+    styleSession = null;
+    logOutput(message);
+    input.focus();
+}
+
+function handleStyleKey(event) {
+    const propertyKeys = ['fontIndex', 'backgroundIndex', 'textIndex', 'promptIndex'];
+    if (event.key === 'Escape') {
+        event.preventDefault();
+        styleSession.panel.remove();
+        styleSession = null;
+        logOutput('Style editor cancelled.');
+        return true;
+    }
+    if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+        event.preventDefault();
+        const step = event.key === 'ArrowUp' ? -1 : 1;
+        styleSession.selected = (styleSession.selected + step + 6) % 6;
+        renderStyleSession();
+        return true;
+    }
+    if ((event.key === 'ArrowLeft' || event.key === 'ArrowRight') && styleSession.selected < 4) {
+        event.preventDefault();
+        const key = propertyKeys[styleSession.selected];
+        const options = styleSession.selected === 0 ? fontOptions : colorOptions;
+        const step = event.key === 'ArrowLeft' ? -1 : 1;
+        styleSession[key] = (styleSession[key] + step + options.length) % options.length;
+        renderStyleSession();
+        return true;
+    }
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        if (styleSession.selected === 4) {
+            finishStyleSession(currentSessionStyle(), 'Terminal style saved.');
+        } else if (styleSession.selected === 5) {
+            finishStyleSession(defaultTerminalStyle, 'Terminal style reset to default.');
+        }
+        return true;
+    }
+    return true;
+}
+
+function openStyleDialog() {
+    if (styleSession) return;
+
+    const currentStyle = getComputedStyle(document.body);
+    const panel = document.createElement('div');
+    panel.className = 'terminal-style-panel';
+    styleSession = {
+        panel,
+        selected: 0,
+        fontIndex: optionIndex(fontOptions, document.body.style.fontFamily || defaultTerminalStyle.font),
+        backgroundIndex: optionIndex(colorOptions, currentStyle.getPropertyValue('--terminal-background').trim()),
+        textIndex: optionIndex(colorOptions, currentStyle.getPropertyValue('--terminal-text').trim()),
+        promptIndex: optionIndex(colorOptions, currentStyle.getPropertyValue('--terminal-prompt').trim())
+    };
+    history.appendChild(panel);
+    renderStyleSession();
+}
+
+loadTerminalStyle();
 
 function registerCommand(name, handler, description = '') {
     const commandName = String(name).trim().toLowerCase();
@@ -187,3 +385,5 @@ registerCommand('date', () => logOutput(new Date().toString()), 'Show the curren
 registerCommand('clear', () => { history.innerHTML = ''; }, 'Clear the terminal');
 
 registerCommand('exit', () => logOutput("'exit' does not support in this version."), 'Close the terminal');
+
+registerCommand('style', () => openStyleDialog(), 'Customize the terminal appearance');
