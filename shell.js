@@ -384,6 +384,16 @@ registerCommand('date', () => logOutput(new Date().toString()), 'Show the curren
 
 registerCommand('clear', () => { history.innerHTML = ''; }, 'Clear the terminal');
 
-registerCommand('exit', () => logOutput("'exit' does not support in this version."), 'Close the terminal');
+registerCommand('exit', () => {
+    logOutput('Closing tab...');
+    window.close();
+
+    // Browsers block scripts from closing tabs the user opened themselves.
+    window.setTimeout(() => {
+        if (!window.closed) {
+            logOutput('Your browser blocked this tab from closing. Use Ctrl+W (or Cmd+W on Mac).');
+        }
+    }, 250);
+}, 'Close this browser tab');
 
 registerCommand('style', () => openStyleDialog(), 'Customize the terminal appearance');
