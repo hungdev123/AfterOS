@@ -2,5 +2,9 @@
     {
         "name": "test",
         "description": "Verify that package imports work"
+    },
+    {
+        "name": "bstyle",
+        "description": "Advanced keyboard-driven terminal styling with HEX colors"
     }
 ]
