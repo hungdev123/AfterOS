@@ -42,7 +42,9 @@ const defaultTerminalStyle = {
     font: "'Courier New', Courier, monospace",
     background: '#000000',
     text: '#ffffff',
-    prompt: '#87ceeb'
+    prompt: '#87ceeb',
+    backgroundImage: '',
+    backgroundBlur: 0
 };
 const fontOptions = [
     { label: 'Courier New', value: "'Courier New', Courier, monospace" },
@@ -70,6 +72,12 @@ function applyTerminalStyle(style) {
     rootStyle.setProperty('--terminal-background', style.background);
     rootStyle.setProperty('--terminal-text', style.text);
     rootStyle.setProperty('--terminal-prompt', style.prompt || defaultTerminalStyle.prompt);
+    const imageUrl = style.backgroundImage || '';
+    const blur = Math.max(0, Number(style.backgroundBlur) || 0);
+    rootStyle.setProperty('--terminal-background-image', imageUrl ? `url(${JSON.stringify(imageUrl)})` : 'none');
+    rootStyle.setProperty('--terminal-background-blur', `${blur}px`);
+    document.body.dataset.backgroundImage = imageUrl;
+    document.body.dataset.backgroundBlur = String(blur);
     document.body.style.fontFamily = style.font;
 }
 
@@ -84,7 +92,12 @@ function saveTerminalStyle(style) {
     // Cookie is the primary store; localStorage keeps the setting in previews
     // or browsers that disable site cookies.
     try {
-        document.cookie = `${encodeURIComponent(terminalStyleCookieName)}=${encodeURIComponent(serializedStyle)}; max-age=31536000; path=/; samesite=lax`;
+        if (serializedStyle.length < 3500) {
+            document.cookie = `${encodeURIComponent(terminalStyleCookieName)}=${encodeURIComponent(serializedStyle)}; max-age=31536000; path=/; samesite=lax`;
+        } else {
+            // Uploaded images exceed a cookie's size limit; use localStorage only.
+            document.cookie = `${encodeURIComponent(terminalStyleCookieName)}=; max-age=0; path=/; samesite=lax`;
+        }
     } catch {
         // The local backup below still lets the terminal retain its style.
     }
@@ -112,7 +125,9 @@ function isDefaultTerminalStyle(style) {
     return style.font === defaultTerminalStyle.font
         && style.background === defaultTerminalStyle.background
         && style.text === defaultTerminalStyle.text
-        && style.prompt === defaultTerminalStyle.prompt;
+        && style.prompt === defaultTerminalStyle.prompt
+        && !style.backgroundImage
+        && Number(style.backgroundBlur) === 0;
 }
 
 function loadTerminalStyle() {
@@ -134,7 +149,9 @@ function getTerminalStyle() {
         font: document.body.style.fontFamily || defaultTerminalStyle.font,
         background: currentStyle.getPropertyValue('--terminal-background').trim() || defaultTerminalStyle.background,
         text: currentStyle.getPropertyValue('--terminal-text').trim() || defaultTerminalStyle.text,
-        prompt: currentStyle.getPropertyValue('--terminal-prompt').trim() || defaultTerminalStyle.prompt
+        prompt: currentStyle.getPropertyValue('--terminal-prompt').trim() || defaultTerminalStyle.prompt,
+        backgroundImage: document.body.dataset.backgroundImage || '',
+        backgroundBlur: Number(document.body.dataset.backgroundBlur) || 0
     };
 }
 
@@ -188,12 +205,7 @@ function renderStyleSession() {
 }
 
 function finishStyleSession(style, message) {
-    applyTerminalStyle(style);
-    if (isDefaultTerminalStyle(style)) {
-        clearTerminalStyle();
-    } else {
-        saveTerminalStyle(style);
-    }
+    setTerminalStyle(style);
     styleSession.panel.remove();
     styleSession = null;
     logOutput(message);
@@ -230,7 +242,11 @@ function handleStyleKey(event) {
         if (styleSession.selected === 4) {
             finishStyleSession(currentSessionStyle(), 'Terminal style saved.');
         } else if (styleSession.selected === 5) {
-            finishStyleSession(defaultTerminalStyle, 'Terminal style reset to default.');
+            resetTerminalStyle();
+            styleSession.panel.remove();
+            styleSession = null;
+            logOutput('Terminal style reset to default.');
+            input.focus();
         }
         return true;
     }
