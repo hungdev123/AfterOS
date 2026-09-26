@@ -128,6 +128,32 @@ function loadTerminalStyle() {
     }
 }
 
+function getTerminalStyle() {
+    const currentStyle = getComputedStyle(document.body);
+    return {
+        font: document.body.style.fontFamily || defaultTerminalStyle.font,
+        background: currentStyle.getPropertyValue('--terminal-background').trim() || defaultTerminalStyle.background,
+        text: currentStyle.getPropertyValue('--terminal-text').trim() || defaultTerminalStyle.text,
+        prompt: currentStyle.getPropertyValue('--terminal-prompt').trim() || defaultTerminalStyle.prompt
+    };
+}
+
+function setTerminalStyle(style) {
+    const nextStyle = { ...getTerminalStyle(), ...style };
+    applyTerminalStyle(nextStyle);
+    if (isDefaultTerminalStyle(nextStyle)) {
+        clearTerminalStyle();
+    } else {
+        saveTerminalStyle(nextStyle);
+    }
+    return nextStyle;
+}
+
+function resetTerminalStyle() {
+    applyTerminalStyle(defaultTerminalStyle);
+    clearTerminalStyle();
+}
+
 function optionIndex(options, value) {
     const index = options.findIndex((option) => option.value === value);
     return index === -1 ? 0 : index;
@@ -266,7 +292,12 @@ async function installApp(url) {
     await install({
         registerCommand,
         logOutput,
-        commands: () => [...commands.keys()]
+        commands: () => [...commands.keys()],
+        terminalStyle: {
+            get: getTerminalStyle,
+            set: setTerminalStyle,
+            reset: resetTerminalStyle
+        }
     });
 }
 
