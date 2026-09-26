@@ -107,14 +107,32 @@ export default function install({ registerCommand, logOutput, terminalStyle }) {
         const picker = document.createElement('input');
         picker.type = 'file';
         picker.accept = 'image/*';
+        picker.hidden = true;
+        document.body.appendChild(picker);
+
+        const removePicker = () => picker.remove();
         picker.addEventListener('change', () => {
             const file = picker.files?.[0];
-            if (!file || !session) return;
+            if (!file || !session) {
+                removePicker();
+                return;
+            }
+            if (!file.type.startsWith('image/')) {
+                logOutput('Please choose an image file.');
+                removePicker();
+                return;
+            }
             const reader = new FileReader();
             reader.addEventListener('load', () => {
+                removePicker();
                 if (!session) return;
                 session.style.backgroundImage = reader.result;
+                logOutput(`Image selected: ${file.name}. Choose Save and exit to apply it.`);
                 render();
+            });
+            reader.addEventListener('error', () => {
+                removePicker();
+                logOutput('Could not read that image file.');
             });
             reader.readAsDataURL(file);
         });
